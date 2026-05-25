@@ -1,0 +1,32 @@
+[project]
+name = "agent-hub"
+version = "0.1.0"
+description = "Agent Hub — local-first agentic stack (slm core package)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "packages/*",
+    "agent-hub",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/slm/tests", "tests"]
+asyncio_mode = "auto"
+pythonpath = ["packages/slm/src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

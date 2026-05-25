@@ -1,0 +1,23 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  slm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      SLM_OLLAMA_BASE_URL: http://ollama:11434
+      SLM_DEFAULT_MODEL: qwen2.5-coder:14b
+      SLM_LOG_FORMAT: json
+    depends_on:
+      - ollama
+    profiles:
+      - full
+
+volumes:
+  ollama_data:
