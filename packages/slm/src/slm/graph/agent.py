@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -57,6 +58,7 @@ def build_planner_graph(
 
         if step.goal == "":
             step.goal = state["goal"]
+        step.task_id = _normalize_task_id(step.task_id)
         step.metrics.latency_ms = latency_ms
         step.metrics.tokens = result.metrics.total_tokens
 
@@ -93,6 +95,17 @@ def run_planner(
         workspace_context=workspace_context,
     )
     return app.invoke({"goal": goal, "step": None, "raw_response": "", "error": None})
+
+
+def _normalize_task_id(task_id: str) -> str:
+    placeholder = task_id.strip().lower().replace(" ", "")
+    if placeholder in {"", "uuid-string", "uuid", "task_id"}:
+        return str(uuid.uuid4())
+    try:
+        uuid.UUID(task_id)
+        return task_id
+    except ValueError:
+        return str(uuid.uuid4())
 
 
 def run_agent(model: ChatModel, goal: str, workspace_context: str) -> AgentState:

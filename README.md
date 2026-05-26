@@ -16,8 +16,14 @@ ollama pull qwen2.5-coder:14b
 # Raw LLM chat (no repo context)
 uv run slm chat "Explain what Agent Hub is building."
 
-# Repo-aware structured step (git status + staged diff injected)
-uv run slm agent "Suggest a commit message for staged changes"
+# Repo-aware agent (README, tree, git status + staged/unstaged diffs)
+uv run slm agent --brief "What is this repository about?"
+
+# Commit messages — uses diffs from workspace snapshot
+uv run slm agent "Write commit message(s) for uncommitted changes"
+
+# Planner with workspace context
+uv run slm plan --repo "Break down adding file search tool"
 
 # Planner-only JSON (no repo context)
 uv run slm plan "Add a hello-world function to main.py"
@@ -28,8 +34,8 @@ uv run slm plan "Add a hello-world function to main.py"
 | Command | Purpose |
 |---------|---------|
 | `slm chat` | Quick Q&A — **does not** see your repo or run tools |
-| `slm agent` | **Agent Hub** tasks — injects git workspace context, returns `AgentStep` JSON |
-| `slm plan` | Structured plan JSON without repo snapshot |
+| `slm agent` | **Agent Hub** — README + tree + git snapshot; use `--brief` for a short answer |
+| `slm plan` | Structured plan JSON; add `--repo` or `--cwd` for workspace context |
 
 ## Development
 

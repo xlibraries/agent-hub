@@ -1,5 +1,10 @@
 
-from slm.telemetry.setup import configure_telemetry, is_telemetry_enabled, reset_telemetry
+from slm.telemetry.setup import (
+    configure_telemetry,
+    is_telemetry_enabled,
+    reset_telemetry,
+    shutdown_telemetry,
+)
 from slm.telemetry.tracing import start_span
 
 
@@ -23,5 +28,8 @@ def test_console_span_does_not_raise(monkeypatch) -> None:
     monkeypatch.setenv("SLM_OTEL_EXPORTER", "console")
     _fresh_settings(monkeypatch)
     configure_telemetry()
-    with start_span("test.span", attributes={"slm.test": True}) as span:
-        span.set_attribute("slm.ok", True)
+    try:
+        with start_span("test.span", attributes={"slm.test": True}) as span:
+            span.set_attribute("slm.ok", True)
+    finally:
+        shutdown_telemetry()

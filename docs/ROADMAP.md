@@ -32,6 +32,6 @@ See [GOLDEN_RULES.md](GOLDEN_RULES.md).
 | [#13](https://github.com/xlibraries/agent-hub/issues/13) | Tool executor loop |
 | [#14](https://github.com/xlibraries/agent-hub/issues/14) | Git & shell safety |
 
-**Current focus:** Phase 0–1 — infrastructure, `slm` CLI, `AgentStep` protocol, repo context via `slm agent`.
+**Current focus:** Phase 1 — `slm agent` workspace snapshot ([#12](https://github.com/xlibraries/agent-hub/issues/12): README, tree, git diffs); next [#13](https://github.com/xlibraries/agent-hub/issues/13) tool loop.
 
 **Principles:** reliable before autonomous · observable before complex · benchmarked before optimized · modular before generalized.

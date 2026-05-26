@@ -72,7 +72,7 @@ class LangChainChatModelAdapter(ChatModel):
         return self._model_id
 
     def _runnable(self, temperature: float) -> BaseChatModel:
-        """Per-call sampling — bind on the model, not invoke kwargs (Ollama client rejects the latter)."""
+        """Bind temperature on the model; Ollama rejects temperature in invoke kwargs."""
         default = getattr(self._model, "temperature", None)
         if default is not None and float(default) == temperature:
             return self._model

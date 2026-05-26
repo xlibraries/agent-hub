@@ -76,8 +76,13 @@ def agent(
         None, "--cwd", help="Repository root (default: current directory)"
     ),
     output: str | None = typer.Option(None, "--output", "-o", help="Write AgentStep JSON to file"),
+    brief: bool = typer.Option(
+        False,
+        "--brief",
+        help="Print memory_write.content (or thought) before JSON",
+    ),
 ) -> None:
-    """Agent Hub task runner: injects git workspace context, returns structured AgentStep JSON."""
+    """Agent Hub task runner: injects workspace snapshot, returns structured AgentStep JSON."""
     log = get_logger("slm.agent")
     if is_kill_switch_engaged():
         typer.secho("Kill switch is engaged. Aborting.", fg=typer.colors.RED, err=True)
@@ -91,7 +96,11 @@ def agent(
     with tracker.track(
         "agent",
         model=llm.model_id,
-        params={"goal_len": len(goal), "git_repo": repo.is_git_repo},
+        params={
+            "goal_len": len(goal),
+            "git_repo": repo.is_git_repo,
+            "has_readme": bool(repo.readme),
+        },
     ) as run:
         state = run_agent(llm, goal, context_block)
 
@@ -111,6 +120,16 @@ def agent(
             run_id=run.run_id or None,
         )
 
+    if brief:
+        summary = (
+            step.output.strip()
+            or (step.memory_write.content if step.memory_write else "")
+            or step.thought
+        )
+        if summary.strip():
+            typer.echo(summary.strip())
+            typer.echo("")
+
     if output:
         with open(output, "w", encoding="utf-8") as f:
             f.write(text)
@@ -121,9 +140,17 @@ def agent(
 def plan(
     goal: str = typer.Argument(..., help="Objective to decompose"),
     model: str | None = typer.Option(None, "--model", "-m"),
+    cwd: Path | None = typer.Option(
+        None, "--cwd", help="Workspace root for optional repo context"
+    ),
+    repo: bool = typer.Option(
+        False,
+        "--repo",
+        help="Inject workspace snapshot (README, tree, git). Implied when --cwd is set.",
+    ),
     output: str | None = typer.Option(None, "--output", "-o", help="Write AgentStep JSON to file"),
 ) -> None:
-    """Structured AgentStep JSON without repo context (planner-only)."""
+    """Structured AgentStep JSON; add --repo or --cwd for workspace context."""
     log = get_logger("slm.plan")
     if is_kill_switch_engaged():
         typer.secho("Kill switch is engaged. Aborting.", fg=typer.colors.RED, err=True)
@@ -131,9 +158,16 @@ def plan(
 
     llm = create_ollama_model(model)
     tracker = get_tracker()
+    workspace_context = None
+    if repo or cwd is not None:
+        workspace_context = gather_repo_context(cwd).as_prompt_block()
 
-    with tracker.track("plan", model=llm.model_id, params={"goal_len": len(goal)}) as run:
-        state = run_planner(llm, goal)
+    with tracker.track(
+        "plan",
+        model=llm.model_id,
+        params={"goal_len": len(goal), "with_repo": workspace_context is not None},
+    ) as run:
+        state = run_planner(llm, goal, workspace_context=workspace_context)
 
         if state.get("error"):
             typer.secho(state["error"], fg=typer.colors.RED, err=True)

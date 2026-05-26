@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import Literal
 
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExporter
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+    SimpleSpanProcessor,
+    SpanExporter,
+    SpanProcessor,
+)
 
 from slm.config.settings import get_settings
 
@@ -56,7 +63,8 @@ def _build_exporter(kind: ExporterKind) -> SpanExporter | None:
     if kind == "none":
         return None
     if kind == "console":
-        return ConsoleSpanExporter()
+        # stderr avoids pytest stdout capture closing before BatchSpanProcessor flushes
+        return ConsoleSpanExporter(out=sys.stderr)
     if kind == "otlp":
         endpoint = os.environ.get(
             "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
@@ -68,10 +76,25 @@ def _build_exporter(kind: ExporterKind) -> SpanExporter | None:
     return None
 
 
+def _span_processor(exporter: SpanExporter, kind: ExporterKind) -> SpanProcessor:
+    # Console: sync export (no background thread; safe under pytest).
+    if kind == "console":
+        return SimpleSpanProcessor(exporter)
+    return BatchSpanProcessor(exporter)
+
+
+def shutdown_telemetry() -> None:
+    """Flush and shut down the tracer provider (tests and CLI exit)."""
+    global _configured
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, TracerProvider):
+        provider.shutdown()
+    _configured = False
+
+
 def reset_telemetry() -> None:
     """Reset provider state (tests only)."""
-    global _configured
-    _configured = False
+    shutdown_telemetry()
 
 
 def configure_telemetry() -> TracerProvider | None:
@@ -95,7 +118,7 @@ def configure_telemetry() -> TracerProvider | None:
     )
     provider = TracerProvider(resource=resource)
     if exporter is not None:
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+        provider.add_span_processor(_span_processor(exporter, kind))
     trace.set_tracer_provider(provider)
     _configured = True
     return provider

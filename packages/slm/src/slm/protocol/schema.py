@@ -4,7 +4,7 @@ import uuid
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class MemoryType(StrEnum):
@@ -47,6 +47,10 @@ class AgentStep(BaseModel):
     task_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     goal: str = ""
     thought: str = ""
+    output: str = Field(
+        default="",
+        description="User-facing answer (informational goals, commit message text, etc.).",
+    )
     plan: list[str] = Field(default_factory=list)
     tool: ToolCall | None = None
     verification: Verification = Field(default_factory=Verification)
@@ -54,3 +58,25 @@ class AgentStep(BaseModel):
     metrics: StepMetrics = Field(default_factory=StepMetrics)
 
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_null_fields(cls, data: Any) -> Any:
+        """SLMs often emit JSON null instead of [] or {} — normalize before validation."""
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        if out.get("plan") is None:
+            out["plan"] = []
+        if out.get("metrics") is None:
+            out["metrics"] = {}
+        if out.get("verification") is None:
+            out["verification"] = {}
+        for key in ("goal", "thought", "output", "task_id"):
+            if out.get(key) is None:
+                out[key] = ""
+        if out.get("memory_write") is None:
+            out.pop("memory_write", None)
+        if out.get("tool") is None:
+            out.pop("tool", None)
+        return out

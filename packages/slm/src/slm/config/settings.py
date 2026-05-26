@@ -37,6 +37,12 @@ class Settings(BaseSettings):
         description="Trace exporter: none | console | otlp",
     )
     otel_service_name: str = Field(default="agent-hub-slm")
+    context_max_chars: int = Field(default=24_000)
+    context_diff_max_chars: int = Field(default=8_000)
+    context_readme_max_chars: int = Field(default=6_000)
+    context_manifest_max_chars: int = Field(default=2_000)
+    context_tree_max_entries: int = Field(default=120)
+    context_tree_max_depth: int = Field(default=2)
 
 
 @lru_cache

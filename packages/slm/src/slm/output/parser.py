@@ -32,12 +32,21 @@ def extract_json_blob(text: str) -> str:
     return text.strip()
 
 
+def _payload_for_model(data: object, model: type[T]) -> object:
+    """Drop keys the model does not define (SLMs often add spurious fields)."""
+    if not isinstance(data, dict):
+        return data
+    allowed = set(model.model_fields.keys())
+    return {key: value for key, value in data.items() if key in allowed}
+
+
 def parse_structured(text: str, model: type[T]) -> T:
     blob = extract_json_blob(text)
     try:
         data = json.loads(blob)
     except json.JSONDecodeError as exc:
         raise StructuredOutputError(f"Invalid JSON: {exc}") from exc
+    data = _payload_for_model(data, model)
     try:
         return model.model_validate(data)
     except ValidationError as exc:

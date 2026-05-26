@@ -22,15 +22,15 @@ Memory Write
 Persistent Knowledge Layer
 ```
 
-**Today:** `slm agent` runs planner + read-only git context. Tool execution and verifier nodes are Phase 2+.
+**Today:** `slm agent` runs planner + workspace snapshot (README, shallow tree, git). Tool execution and verifier nodes are Phase 2+.
 
 ## CLI surface
 
 | Command | Repo context | Tools | Output |
 |---------|--------------|-------|--------|
 | `slm chat` | No | No | Plain text |
-| `slm plan` | No | No | `AgentStep` JSON |
-| `slm agent` | Yes (git snapshot) | No (plan only) | `AgentStep` JSON |
+| `slm plan` | Optional (`--repo`, `--cwd`) | No | `AgentStep` JSON |
+| `slm agent` | Yes (README, tree, git) | No (plan only) | `AgentStep` JSON; `--brief` for summary |
 
 See [GOLDEN_RULES.md](GOLDEN_RULES.md) for when to use each command.
 
