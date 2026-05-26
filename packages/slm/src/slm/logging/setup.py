@@ -23,7 +23,7 @@ def _add_trace_id(
 
 def configure_logging() -> None:
     settings = get_settings()
-    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    level = getattr(logging, str(settings.log_level).upper(), logging.INFO)
 
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
