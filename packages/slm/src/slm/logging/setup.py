@@ -8,6 +8,19 @@ from opentelemetry import trace
 from slm.config.settings import get_settings
 
 
+def _add_trace_id(
+    _logger: logging.Logger,
+    _method_name: str,
+    event_dict: dict[str, Any],
+) -> dict[str, Any]:
+    span = trace.get_current_span()
+    ctx = span.get_span_context()
+    if ctx.is_valid and ctx.trace_id:
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
+        event_dict["span_id"] = format(ctx.span_id, "016x")
+    return event_dict
+
+
 def configure_logging() -> None:
     settings = get_settings()
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
@@ -16,6 +29,7 @@ def configure_logging() -> None:
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
+        _add_trace_id,
         structlog.processors.StackInfoRenderer(),
     ]
 
@@ -46,6 +60,6 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
 def trace_id() -> str | None:
     span = trace.get_current_span()
     ctx = span.get_span_context()
-    if ctx.trace_id:
+    if ctx.is_valid and ctx.trace_id:
         return format(ctx.trace_id, "032x")
     return None

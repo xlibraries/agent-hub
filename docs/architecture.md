@@ -52,7 +52,7 @@ Every orchestration step serializes to `slm.protocol.AgentStep` (`packages/slm/s
 
 | Phase | Status |
 |-------|--------|
-| 0 — Environment | In progress (monorepo, uv, Docker, CI scaffold) |
+| 0 — Environment | Complete (see [observability.md](observability.md)) |
 | 1 — Local SLM core | In progress (`chat`, `plan`, `agent`, protocol, kill switch) |
 | 2 — Tools | Not started |
 | 3+ | Not started |

@@ -23,6 +23,7 @@ coverage.xml
 *.log
 .benchmarks/
 experiments/
+.agent-hub/
 data/
 *.db
 *.sqlite3

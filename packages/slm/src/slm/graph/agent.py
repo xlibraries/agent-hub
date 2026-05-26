@@ -12,6 +12,7 @@ from slm.prompts.agent import AGENT_SYSTEM
 from slm.prompts.planner import PLANNER_SYSTEM
 from slm.protocol.schema import AgentStep
 from slm.safety.kill_switch import assert_not_killed
+from slm.telemetry.tracing import start_span
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,10 @@ def build_planner_graph(
 
     def plan_node(state: AgentState) -> AgentState:
         assert_not_killed()
+        with start_span("slm.graph.plan", attributes={"slm.has_context": bool(workspace_context)}):
+            return _plan_node_impl(state)
+
+    def _plan_node_impl(state: AgentState) -> AgentState:
         started = time.perf_counter()
         user_content = state["goal"]
         if workspace_context:

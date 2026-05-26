@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 import typer
 from slm.config.settings import get_settings
-from pathlib import Path
-
 from slm.context.repo import gather_repo_context
+from slm.experiments.tracker import get_tracker
 from slm.graph.agent import run_agent, run_planner
 from slm.logging.setup import configure_logging, get_logger
 from slm.models.base import human_message
 from slm.models.ollama import create_ollama_model
 from slm.safety.kill_switch import is_kill_switch_engaged
+from slm.telemetry.setup import configure_telemetry
 
 app = typer.Typer(
     name="slm",
@@ -23,6 +24,7 @@ app = typer.Typer(
 
 def _bootstrap() -> None:
     configure_logging()
+    configure_telemetry()
 
 
 @app.callback()
@@ -44,29 +46,35 @@ def chat(
     log = get_logger("slm.chat")
     llm = create_ollama_model(model)
     messages = [human_message(prompt)]
+    tracker = get_tracker()
 
-    if stream:
-        for chunk in llm.stream(messages):
-            sys.stdout.write(chunk)
-            sys.stdout.flush()
-        sys.stdout.write("\n")
-        return
+    with tracker.track("chat", model=llm.model_id, params={"prompt_len": len(prompt)}) as run:
+        if stream:
+            for chunk in llm.stream(messages):
+                sys.stdout.write(chunk)
+                sys.stdout.flush()
+            sys.stdout.write("\n")
+            return
 
-    result = llm.generate(messages)
-    log.info(
-        "chat_complete",
-        model=llm.model_id,
-        latency_ms=result.metrics.latency_ms,
-        tokens=result.metrics.total_tokens,
-    )
-    typer.echo(result.text)
+        result = llm.generate(messages)
+        run.set_metrics(latency_ms=result.metrics.latency_ms, tokens=result.metrics.total_tokens)
+        log.info(
+            "chat_complete",
+            model=llm.model_id,
+            latency_ms=result.metrics.latency_ms,
+            tokens=result.metrics.total_tokens,
+            run_id=run.run_id or None,
+        )
+        typer.echo(result.text)
 
 
 @app.command()
 def agent(
     goal: str = typer.Argument(..., help="Task goal (repo-aware planning)"),
     model: str | None = typer.Option(None, "--model", "-m"),
-    cwd: Path | None = typer.Option(None, "--cwd", help="Repository root (default: current directory)"),
+    cwd: Path | None = typer.Option(
+        None, "--cwd", help="Repository root (default: current directory)"
+    ),
     output: str | None = typer.Option(None, "--output", "-o", help="Write AgentStep JSON to file"),
 ) -> None:
     """Agent Hub task runner: injects git workspace context, returns structured AgentStep JSON."""
@@ -78,17 +86,30 @@ def agent(
     repo = gather_repo_context(cwd)
     context_block = repo.as_prompt_block()
     llm = create_ollama_model(model)
-    state = run_agent(llm, goal, context_block)
+    tracker = get_tracker()
 
-    if state.get("error"):
-        typer.secho(state["error"], fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1)
+    with tracker.track(
+        "agent",
+        model=llm.model_id,
+        params={"goal_len": len(goal), "git_repo": repo.is_git_repo},
+    ) as run:
+        state = run_agent(llm, goal, context_block)
 
-    step = state["step"]
-    assert step is not None
-    payload = step.model_dump(mode="json")
-    text = json.dumps(payload, indent=2)
-    log.info("agent_step", task_id=step.task_id, git_repo=repo.is_git_repo)
+        if state.get("error"):
+            typer.secho(state["error"], fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1)
+
+        step = state["step"]
+        assert step is not None
+        run.set_metrics(latency_ms=step.metrics.latency_ms, tokens=step.metrics.tokens)
+        payload = step.model_dump(mode="json")
+        text = json.dumps(payload, indent=2)
+        log.info(
+            "agent_step",
+            task_id=step.task_id,
+            git_repo=repo.is_git_repo,
+            run_id=run.run_id or None,
+        )
 
     if output:
         with open(output, "w", encoding="utf-8") as f:
@@ -109,17 +130,21 @@ def plan(
         raise typer.Exit(code=1)
 
     llm = create_ollama_model(model)
-    state = run_planner(llm, goal)
+    tracker = get_tracker()
 
-    if state.get("error"):
-        typer.secho(state["error"], fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1)
+    with tracker.track("plan", model=llm.model_id, params={"goal_len": len(goal)}) as run:
+        state = run_planner(llm, goal)
 
-    step = state["step"]
-    assert step is not None
-    payload = step.model_dump(mode="json")
-    text = json.dumps(payload, indent=2)
-    log.info("plan_written", task_id=step.task_id)
+        if state.get("error"):
+            typer.secho(state["error"], fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1)
+
+        step = state["step"]
+        assert step is not None
+        run.set_metrics(latency_ms=step.metrics.latency_ms, tokens=step.metrics.tokens)
+        payload = step.model_dump(mode="json")
+        text = json.dumps(payload, indent=2)
+        log.info("plan_written", task_id=step.task_id, run_id=run.run_id or None)
 
     if output:
         with open(output, "w", encoding="utf-8") as f:
@@ -154,6 +179,44 @@ def bench_latency(
     if model:
         cmd.extend(["--model", model])
     subprocess.run(cmd, check=True)
+
+
+experiments_app = typer.Typer(help="Inspect local experiment runs (SQLite).")
+app.add_typer(experiments_app, name="experiments")
+
+
+@experiments_app.command("list")
+def experiments_list(
+    limit: int = typer.Option(20, "--limit", "-n"),
+    command: str | None = typer.Option(None, "--command", "-c"),
+) -> None:
+    """List recent experiment runs."""
+    from slm.experiments.store import ExperimentStore
+
+    store = ExperimentStore(get_settings().experiments_db_path)
+    rows = store.list_runs(limit=limit, command=command)
+    if not rows:
+        typer.echo("No experiment runs recorded.")
+        return
+    for row in rows:
+        typer.echo(
+            f"{row.run_id[:8]}…  {row.command:6}  {row.status:7}  "
+            f"{row.latency_ms or 0:.0f}ms  tokens={row.tokens or 0}  {row.started_at}"
+        )
+
+
+@experiments_app.command("show")
+def experiments_show(run_id: str = typer.Argument(..., help="Run UUID (prefix ok)")) -> None:
+    """Show one experiment run as JSON."""
+    from slm.experiments.store import ExperimentStore
+
+    store = ExperimentStore(get_settings().experiments_db_path)
+    rows = store.list_runs(limit=200)
+    match = next((r for r in rows if r.run_id.startswith(run_id)), None)
+    if match is None:
+        typer.secho(f"No run matching {run_id!r}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    typer.echo(json.dumps(match.__dict__, indent=2, default=str))
 
 
 @app.command()

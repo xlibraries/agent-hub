@@ -39,10 +39,25 @@ uv run slm bench --help
 docker compose -f docker/docker-compose.yml up -d
 ```
 
+## Observability
+
+```bash
+# Local experiment log (SQLite)
+uv run slm agent "Summarize staged changes"
+uv run slm experiments list
+
+# OpenTelemetry console spans
+export SLM_OTEL_ENABLED=1 SLM_OTEL_EXPORTER=console
+uv run slm chat "hello"
+```
+
+See [observability.md](docs/observability.md).
+
 ## Documentation
 
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture](docs/architecture.md)
+- [Observability](docs/observability.md)
 - [Golden rules](docs/GOLDEN_RULES.md)
 
 ## Design principles

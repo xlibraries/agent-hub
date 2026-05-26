@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
+from slm.telemetry.tracing import start_span
+
 
 @dataclass
 class GenerationMetrics:
@@ -79,9 +81,13 @@ class LangChainChatModelAdapter(ChatModel):
     def generate(
         self, messages: list[BaseMessage], *, temperature: float = 0.2
     ) -> GenerationResult:
-        started = time.perf_counter()
-        response: AIMessage = self._runnable(temperature).invoke(messages)
-        latency_ms = (time.perf_counter() - started) * 1000
+        with start_span(
+            "slm.model.generate",
+            attributes={"slm.model_id": self.model_id, "slm.message_count": len(messages)},
+        ):
+            started = time.perf_counter()
+            response: AIMessage = self._runnable(temperature).invoke(messages)
+            latency_ms = (time.perf_counter() - started) * 1000
 
         usage = getattr(response, "usage_metadata", None) or {}
         prompt_tokens = int(usage.get("input_tokens", 0) or 0)

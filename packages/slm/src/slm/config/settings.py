@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +23,20 @@ class Settings(BaseSettings):
         default="SLM_KILL_SWITCH",
         description="Environment variable name; if set to 1/true, abort autonomous loops.",
     )
+    experiments_enabled: bool = Field(default=True)
+    experiments_db_path: Path = Field(
+        default=Path(".agent-hub/experiments.db"),
+        description="SQLite database for local experiment tracking.",
+    )
+    otel_enabled: bool | None = Field(
+        default=None,
+        description="Force OTEL on/off; when unset, enabled if SLM_OTEL_EXPORTER is set.",
+    )
+    otel_exporter: str = Field(
+        default="none",
+        description="Trace exporter: none | console | otlp",
+    )
+    otel_service_name: str = Field(default="agent-hub-slm")
 
 
 @lru_cache
