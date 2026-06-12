@@ -9,6 +9,7 @@ Core package for the Agent Hub local SLM stack.
 | `slm.config` | Environment-driven settings |
 | `slm.logging` | Structured logging + trace context |
 | `slm.protocol` | Canonical agent step schema |
+| `slm.prompts` | Prompt registry: builtin system prompts + file overrides |
 | `slm.models` | Model abstraction (Ollama / Qwen) |
 | `slm.output` | JSON structured output parsing |
 | `slm.context` | Read-only repo/git workspace snapshots |
@@ -31,6 +32,22 @@ Core package for the Agent Hub local SLM stack.
 All tools are workspace-scoped (path escapes are rejected) and read-only.
 Write operations (file edits, `git commit`) are deliberately excluded until
 the git/shell safety policy lands (issue #14).
+
+## Prompt management (`slm prompts`)
+
+System prompts are resolved through a registry. Builtins (`agent.default`,
+`planner.default`) can be overridden — or new variants added — by dropping
+`<key>.md` files into `.agent-hub/prompts/`:
+
+```bash
+slm prompts list
+slm prompts show agent.default
+
+mkdir -p .agent-hub/prompts
+echo "Be extremely brief." > .agent-hub/prompts/agent.concise.md
+slm agent "summarize repo" --prompt-key agent.concise
+slm plan "ship feature X" --prompt-key planner.default
+```
 
 ## Conversation persistence (`slm chat --session`)
 
