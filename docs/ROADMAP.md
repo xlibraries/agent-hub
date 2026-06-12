@@ -37,12 +37,12 @@ See [GOLDEN_RULES.md](GOLDEN_RULES.md).
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 — Environment | ✅ ~100% | uv, Docker, structlog, OTEL, experiments, CI, pytest, benchmarks |
-| 1 — Local SLM core | 🔄 ~75% | Done: models, `AgentStep`, parser, CLI, repo context, kill switch, read-only tool execution. Left: prompt management, conversation persistence, file-editing assistant |
+| 1 — Local SLM core | 🔄 ~85% | Done: models, `AgentStep`, parser, CLI, repo context, kill switch, read-only tool execution, conversation persistence (`--session`). Left: prompt management, file-editing assistant |
 | 2 — Tool execution | 🔄 ~25% | Done: registry + 5 read-only tools, execution tracing. Left: sandbox, shell/python exec, file editing, replay, recovery |
 | 3 — Evaluation | 🔄 ~10% | Latency scaffold only |
 | 4–8 | ⬜ 0% | Memory, RAG, browser, code intelligence, multi-agent |
 | 9 — Hardening | ⬜ 0% | |
 
-**Current focus:** Phase 1 close-out — conversation persistence, prompt management; then [#14](https://github.com/xlibraries/agent-hub/issues/14) git safety to unlock write tools.
+**Current focus:** Phase 1 close-out — prompt management; then [#14](https://github.com/xlibraries/agent-hub/issues/14) git safety to unlock write tools.
 
 **Principles:** reliable before autonomous · observable before complex · benchmarked before optimized · modular before generalized.

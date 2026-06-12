@@ -37,23 +37,60 @@ def chat(
     prompt: str = typer.Argument(..., help="User message"),
     model: str | None = typer.Option(None, "--model", "-m", help="Ollama model id"),
     stream: bool = typer.Option(False, "--stream", "-s", help="Stream tokens to stdout"),
+    session: str | None = typer.Option(
+        None,
+        "--session",
+        help="Named session: loads prior turns as context and persists this exchange",
+    ),
 ) -> None:
-    """Raw single-turn LLM chat (no repo context, no tools).
+    """Raw LLM chat (no repo context, no tools); --session makes it multi-turn.
 
     For repo-aware goals (commit messages, git status, code changes), use `slm agent`.
     For structured JSON only, use `slm plan`.
     """
     log = get_logger("slm.chat")
     llm = create_ollama_model(model)
-    messages = [human_message(prompt)]
     tracker = get_tracker()
 
-    with tracker.track("chat", model=llm.model_id, params={"prompt_len": len(prompt)}) as run:
+    store = None
+    history: list = []
+    if session:
+        from slm.memory.store import SessionStore
+
+        store = SessionStore(get_settings().sessions_db_path)
+        store.ensure_session(session)
+        history = store.as_chat_messages(session)
+
+    messages = [*history, human_message(prompt)]
+
+    def persist(response_text: str, *, tokens: int | None, latency_ms: float | None) -> None:
+        if store is None or session is None:
+            return
+        store.append_message(session, "user", prompt, command="chat", model=llm.model_id)
+        store.append_message(
+            session,
+            "assistant",
+            response_text,
+            command="chat",
+            model=llm.model_id,
+            tokens=tokens,
+            latency_ms=latency_ms,
+        )
+        log.info("session_appended", session=session, turns=len(history) // 2 + 1)
+
+    with tracker.track(
+        "chat",
+        model=llm.model_id,
+        params={"prompt_len": len(prompt), "session": session or ""},
+    ) as run:
         if stream:
+            chunks: list[str] = []
             for chunk in llm.stream(messages):
+                chunks.append(chunk)
                 sys.stdout.write(chunk)
                 sys.stdout.flush()
             sys.stdout.write("\n")
+            persist("".join(chunks), tokens=None, latency_ms=None)
             return
 
         result = llm.generate(messages)
@@ -64,6 +101,11 @@ def chat(
             latency_ms=result.metrics.latency_ms,
             tokens=result.metrics.total_tokens,
             run_id=run.run_id or None,
+        )
+        persist(
+            result.text,
+            tokens=result.metrics.total_tokens,
+            latency_ms=result.metrics.latency_ms,
         )
         typer.echo(result.text)
 
@@ -230,6 +272,51 @@ def bench_latency(
     if model:
         cmd.extend(["--model", model])
     subprocess.run(cmd, check=True)
+
+
+sessions_app = typer.Typer(help="Inspect persisted chat sessions (SQLite).")
+app.add_typer(sessions_app, name="sessions")
+
+
+@sessions_app.command("list")
+def sessions_list(limit: int = typer.Option(20, "--limit", "-n")) -> None:
+    """List persisted sessions, most recently active first."""
+    from slm.memory.store import SessionStore
+
+    store = SessionStore(get_settings().sessions_db_path)
+    rows = store.list_sessions(limit=limit)
+    if not rows:
+        typer.echo("No sessions recorded. Start one with: slm chat \"hi\" --session NAME")
+        return
+    for row in rows:
+        excerpt = row.first_prompt[:60].replace("\n", " ")
+        typer.echo(
+            f"{row.name:20}  msgs={row.message_count:3}  "
+            f"last={row.last_message_at or row.created_at}  {excerpt}"
+        )
+
+
+@sessions_app.command("show")
+def sessions_show(
+    name: str = typer.Argument(..., help="Session name"),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON instead of transcript"),
+) -> None:
+    """Show one session's full transcript."""
+    from slm.memory.store import SessionStore
+
+    store = SessionStore(get_settings().sessions_db_path)
+    records = store.get_messages(name)
+    if not records:
+        typer.secho(f"No messages for session {name!r}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    if json_out:
+        typer.echo(json.dumps([r.__dict__ for r in records], indent=2, default=str))
+        return
+    for record in records:
+        prefix = "you" if record.role == "user" else (record.model or "assistant")
+        typer.echo(f"[{record.created_at}] {prefix}:")
+        typer.echo(record.content)
+        typer.echo("")
 
 
 experiments_app = typer.Typer(help="Inspect local experiment runs (SQLite).")

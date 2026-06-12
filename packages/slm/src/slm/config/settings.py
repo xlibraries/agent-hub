@@ -28,6 +28,10 @@ class Settings(BaseSettings):
         default=Path(".agent-hub/experiments.db"),
         description="SQLite database for local experiment tracking.",
     )
+    sessions_db_path: Path = Field(
+        default=Path(".agent-hub/sessions.db"),
+        description="SQLite database for conversation persistence.",
+    )
     otel_enabled: bool | None = Field(
         default=None,
         description="Force OTEL on/off; when unset, enabled if SLM_OTEL_EXPORTER is set.",
