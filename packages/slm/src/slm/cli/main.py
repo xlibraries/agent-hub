@@ -128,12 +128,25 @@ def agent(
         "--execute",
         help="Run read-only tools requested in the plan (read_file, list_dir, grep_text, git_*)",
     ),
+    prompt_key: str = typer.Option(
+        "agent.default",
+        "--prompt-key",
+        help="System prompt key from the prompt registry (see `slm prompts list`)",
+    ),
 ) -> None:
     """Agent Hub task runner: injects workspace snapshot, returns structured AgentStep JSON."""
+    from slm.prompts.registry import PromptNotFoundError, get_registry
+
     log = get_logger("slm.agent")
     if is_kill_switch_engaged():
         typer.secho("Kill switch is engaged. Aborting.", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
+
+    try:
+        system_prompt = get_registry().get(prompt_key)
+    except PromptNotFoundError:
+        typer.secho(f"Unknown prompt key: {prompt_key!r}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from None
 
     root = (cwd or Path.cwd()).resolve()
     repo = gather_repo_context(root)
@@ -155,6 +168,7 @@ def agent(
             llm,
             goal,
             context_block,
+            system_prompt=system_prompt,
             workspace_root=root,
             execute_tools=execute,
         )
@@ -208,12 +222,25 @@ def plan(
         help="Inject workspace snapshot (README, tree, git). Implied when --cwd is set.",
     ),
     output: str | None = typer.Option(None, "--output", "-o", help="Write AgentStep JSON to file"),
+    prompt_key: str = typer.Option(
+        "planner.default",
+        "--prompt-key",
+        help="System prompt key from the prompt registry (see `slm prompts list`)",
+    ),
 ) -> None:
     """Structured AgentStep JSON; add --repo or --cwd for workspace context."""
+    from slm.prompts.registry import PromptNotFoundError, get_registry
+
     log = get_logger("slm.plan")
     if is_kill_switch_engaged():
         typer.secho("Kill switch is engaged. Aborting.", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
+
+    try:
+        system_prompt = get_registry().get(prompt_key)
+    except PromptNotFoundError:
+        typer.secho(f"Unknown prompt key: {prompt_key!r}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from None
 
     llm = create_ollama_model(model)
     tracker = get_tracker()
@@ -226,7 +253,12 @@ def plan(
         model=llm.model_id,
         params={"goal_len": len(goal), "with_repo": workspace_context is not None},
     ) as run:
-        state = run_planner(llm, goal, workspace_context=workspace_context)
+        state = run_planner(
+            llm,
+            goal,
+            system_prompt=system_prompt,
+            workspace_context=workspace_context,
+        )
 
         if state.get("error"):
             typer.secho(state["error"], fg=typer.colors.RED, err=True)
@@ -272,6 +304,35 @@ def bench_latency(
     if model:
         cmd.extend(["--model", model])
     subprocess.run(cmd, check=True)
+
+
+prompts_app = typer.Typer(help="Inspect system prompts (builtin + overrides).")
+app.add_typer(prompts_app, name="prompts")
+
+
+@prompts_app.command("list")
+def prompts_list() -> None:
+    """List registered prompt keys and their source."""
+    from slm.prompts.registry import get_registry
+
+    settings = get_settings()
+    for info in get_registry().list():
+        typer.echo(f"{info.key:24}  {info.source:8}  {len(info.text)} chars")
+    typer.echo(f"\nOverride dir: {settings.prompts_dir} (place <key>.md files there)")
+
+
+@prompts_app.command("show")
+def prompts_show(key: str = typer.Argument(..., help="Prompt key")) -> None:
+    """Print one prompt's full text."""
+    from slm.prompts.registry import PromptNotFoundError, get_registry
+
+    try:
+        info = get_registry().info(key)
+    except PromptNotFoundError:
+        typer.secho(f"Unknown prompt key: {key!r}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"# key={info.key} source={info.source}")
+    typer.echo(info.text)
 
 
 sessions_app = typer.Typer(help="Inspect persisted chat sessions (SQLite).")

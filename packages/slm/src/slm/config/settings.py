@@ -32,6 +32,10 @@ class Settings(BaseSettings):
         default=Path(".agent-hub/sessions.db"),
         description="SQLite database for conversation persistence.",
     )
+    prompts_dir: Path = Field(
+        default=Path(".agent-hub/prompts"),
+        description="Directory with prompt override files (<key>.md).",
+    )
     otel_enabled: bool | None = Field(
         default=None,
         description="Force OTEL on/off; when unset, enabled if SLM_OTEL_EXPORTER is set.",

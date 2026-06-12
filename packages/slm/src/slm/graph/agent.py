@@ -204,6 +204,7 @@ def run_agent(
     goal: str,
     workspace_context: str,
     *,
+    system_prompt: str = AGENT_SYSTEM,
     workspace_root: Path | None = None,
     execute_tools: bool = False,
 ) -> AgentState:
@@ -211,7 +212,7 @@ def run_agent(
     return run_planner(
         model,
         goal,
-        system_prompt=AGENT_SYSTEM,
+        system_prompt=system_prompt,
         workspace_context=workspace_context,
         workspace_root=workspace_root,
         execute_tools=execute_tools,
