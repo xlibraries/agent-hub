@@ -16,6 +16,11 @@ ollama pull qwen2.5-coder:14b
 # Raw LLM chat (no repo context)
 uv run slm chat "Explain what Agent Hub is building."
 
+# Multi-turn chat with persistence (SQLite-backed)
+uv run slm chat "Remember: my name is X" --session intro
+uv run slm chat "What is my name?" --session intro
+uv run slm sessions list
+
 # Repo-aware agent (README, tree, git status + staged/unstaged diffs)
 uv run slm agent --brief "What is this repository about?"
 
@@ -37,6 +42,8 @@ uv run slm plan "Add a hello-world function to main.py"
 | Command | Purpose |
 |---------|---------|
 | `slm chat` | Quick Q&A — **does not** see your repo or run tools |
+| `slm chat --session NAME` | Multi-turn chat; history persisted in `.agent-hub/sessions.db` |
+| `slm sessions list/show` | Inspect persisted conversations |
 | `slm agent` | **Agent Hub** — README + tree + git snapshot; use `--brief` for a short answer |
 | `slm agent --execute` | Same, plus runs read-only tools from the plan (plan → execute → verify) |
 | `slm plan` | Structured plan JSON; add `--repo` or `--cwd` for workspace context |

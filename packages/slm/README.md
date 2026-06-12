@@ -12,6 +12,7 @@ Core package for the Agent Hub local SLM stack.
 | `slm.models` | Model abstraction (Ollama / Qwen) |
 | `slm.output` | JSON structured output parsing |
 | `slm.context` | Read-only repo/git workspace snapshots |
+| `slm.memory` | SQLite conversation persistence (`SessionStore`) |
 | `slm.tools` | Read-only tool registry (`read_file`, `list_dir`, `grep_text`, `git_status`, `git_diff_staged`) |
 | `slm.safety` | Kill switch for autonomous loops (`SLM_KILL_SWITCH`) |
 | `slm.graph` | LangGraph planner + execute/verify loop + Agent Hub agent path |
@@ -30,3 +31,18 @@ Core package for the Agent Hub local SLM stack.
 All tools are workspace-scoped (path escapes are rejected) and read-only.
 Write operations (file edits, `git commit`) are deliberately excluded until
 the git/shell safety policy lands (issue #14).
+
+## Conversation persistence (`slm chat --session`)
+
+`slm chat` is single-turn by default. With `--session NAME`, prior turns are
+loaded as context and the new exchange is persisted to
+`.agent-hub/sessions.db`:
+
+```bash
+slm chat "My project is called Agent Hub" --session demo
+slm chat "What is my project called?" --session demo   # remembers
+
+slm sessions list
+slm sessions show demo
+slm sessions show demo --json
+```
