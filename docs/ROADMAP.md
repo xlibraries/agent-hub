@@ -30,7 +30,7 @@ See [GOLDEN_RULES.md](GOLDEN_RULES.md).
 |-------|--------|--------|
 | [#12](https://github.com/xlibraries/agent-hub/issues/12) | Repo context + `slm agent` | ✅ Done |
 | [#13](https://github.com/xlibraries/agent-hub/issues/13) | Tool executor loop | 🔄 v1 done (read-only, single tool) |
-| [#14](https://github.com/xlibraries/agent-hub/issues/14) | Git & shell safety | ⬜ Not started |
+| [#14](https://github.com/xlibraries/agent-hub/issues/14) | Git & shell safety | 🔄 Policy module done; CLI write tools pending |
 
 ## Progress
 
@@ -43,6 +43,6 @@ See [GOLDEN_RULES.md](GOLDEN_RULES.md).
 | 4–8 | ⬜ 0% | Memory, RAG, browser, code intelligence, multi-agent |
 | 9 — Hardening | ⬜ 0% | |
 
-**Current focus:** [#14](https://github.com/xlibraries/agent-hub/issues/14) git & shell safety policy → unlocks write tools and the file-editing assistant; then multi-step executor ([#13](https://github.com/xlibraries/agent-hub/issues/13)) and the eval golden path ([#9](https://github.com/xlibraries/agent-hub/issues/9)).
+**Current focus:** write tools behind the git policy gates ([#13](https://github.com/xlibraries/agent-hub/issues/13)/[#14](https://github.com/xlibraries/agent-hub/issues/14)) → file-editing assistant; then the eval golden path ([#9](https://github.com/xlibraries/agent-hub/issues/9)).
 
 **Principles:** reliable before autonomous · observable before complex · benchmarked before optimized · modular before generalized.

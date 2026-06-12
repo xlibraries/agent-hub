@@ -6,6 +6,9 @@ from pathlib import Path
 
 from slm.config.settings import Settings, get_settings
 from slm.context.truncate import truncate_text
+from slm.logging.setup import get_logger
+
+logger = get_logger(__name__)
 
 _SKIP_DIRS = {
     ".git",
@@ -92,6 +95,7 @@ class RepoContext:
 
 
 def _run_git(args: list[str], cwd: Path) -> str:
+    logger.debug("git_invoked", args=args, cwd=str(cwd))
     result = subprocess.run(
         ["git", *args],
         cwd=cwd,
