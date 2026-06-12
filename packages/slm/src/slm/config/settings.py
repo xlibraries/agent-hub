@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     tool_max_read_bytes: int = Field(default=64_000)
     tool_grep_max_matches: int = Field(default=50)
     tool_grep_max_files: int = Field(default=200)
+    executor_max_steps: int = Field(
+        default=5,
+        description="Maximum plan→execute→verify iterations per agent run.",
+    )
 
 
 @lru_cache

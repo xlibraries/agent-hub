@@ -29,20 +29,20 @@ See [GOLDEN_RULES.md](GOLDEN_RULES.md).
 | Issue | Topic | Status |
 |-------|--------|--------|
 | [#12](https://github.com/xlibraries/agent-hub/issues/12) | Repo context + `slm agent` | ✅ Done |
-| [#13](https://github.com/xlibraries/agent-hub/issues/13) | Tool executor loop | 🔄 v1 done (read-only, single tool) |
-| [#14](https://github.com/xlibraries/agent-hub/issues/14) | Git & shell safety | 🔄 Policy module done; CLI write tools pending |
+| [#13](https://github.com/xlibraries/agent-hub/issues/13) | Tool executor loop | ✅ Done (iterative loop, write tools gated) |
+| [#14](https://github.com/xlibraries/agent-hub/issues/14) | Git & shell safety | ✅ Done (policy enforced in `git_exec`) |
 
 ## Progress
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 0 — Environment | ✅ ~100% | uv, Docker, structlog, OTEL, experiments, CI, pytest, benchmarks |
-| 1 — Local SLM core | 🔄 ~95% | Done: models, `AgentStep`, parser, CLI, repo context, kill switch, read-only tool execution, conversation persistence (`--session`), prompt registry (`slm prompts`). Left: file-editing assistant (needs #14 write gates) |
-| 2 — Tool execution | 🔄 ~25% | Done: registry + 5 read-only tools, execution tracing. Left: sandbox, shell/python exec, file editing, replay, recovery |
+| 1 — Local SLM core | ✅ ~100% | Models, `AgentStep`, parser, CLI, repo context, kill switch, iterative tool execution, file-aware assistant (`--allow-writes`), conversation persistence, prompt registry |
+| 2 — Tool execution | 🔄 ~60% | Done: registry, 7 tools (read + gated write/git), policy enforcement, execution tracing, failure recovery via observations. Left: sandboxed shell/python exec, replay, tool benchmarks |
 | 3 — Evaluation | 🔄 ~10% | Latency scaffold only |
 | 4–8 | ⬜ 0% | Memory, RAG, browser, code intelligence, multi-agent |
 | 9 — Hardening | ⬜ 0% | |
 
-**Current focus:** write tools behind the git policy gates ([#13](https://github.com/xlibraries/agent-hub/issues/13)/[#14](https://github.com/xlibraries/agent-hub/issues/14)) → file-editing assistant; then the eval golden path ([#9](https://github.com/xlibraries/agent-hub/issues/9)).
+**Current focus:** evaluation golden path ([#9](https://github.com/xlibraries/agent-hub/issues/9)) — replayable benchmarks against the executor loop; then Phase 4 memory ([#6](https://github.com/xlibraries/agent-hub/issues/6)) building on the session store.
 
 **Principles:** reliable before autonomous · observable before complex · benchmarked before optimized · modular before generalized.

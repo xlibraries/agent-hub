@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from slm.config.settings import Settings, get_settings
 from slm.context.repo import gather_repo_context
 from slm.context.truncate import truncate_text
+from slm.safety.git_policy import GitPolicyViolation, guard_git_command, is_secret_path
 from slm.tools.paths import PathEscapeError, resolve_workspace_path
 from slm.tools.registry import ToolRegistry, ToolResult
 
@@ -164,9 +166,65 @@ def _git_diff_staged_handler(workspace_root: Path, settings: Settings) -> ToolHa
     return handler
 
 
+def _write_file_handler(workspace_root: Path) -> ToolHandler:
+    def handler(args: dict[str, Any]) -> ToolResult:
+        path_arg = str(args.get("path", "")).strip()
+        if not path_arg:
+            return ToolResult(ok=False, output="", error="write_file requires args.path")
+        content = args.get("content")
+        if not isinstance(content, str):
+            return ToolResult(ok=False, output="", error="write_file requires string args.content")
+        if is_secret_path(path_arg):
+            return ToolResult(
+                ok=False, output="", error=f"refusing to write secret-like path: {path_arg!r}"
+            )
+        try:
+            target = resolve_workspace_path(workspace_root, path_arg)
+        except PathEscapeError as exc:
+            return ToolResult(ok=False, output="", error=str(exc))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return ToolResult(ok=True, output=f"wrote {len(content)} chars to {path_arg}")
+
+    return handler
+
+
+def _git_exec_handler(workspace_root: Path, *, confirmed: bool) -> ToolHandler:
+    def handler(args: dict[str, Any]) -> ToolResult:
+        raw = args.get("args")
+        if not isinstance(raw, list) or not all(isinstance(a, str) for a in raw):
+            return ToolResult(
+                ok=False, output="", error='git_exec requires args.args as a list of strings'
+            )
+        git_args = [a for a in raw if a]
+        if git_args and git_args[0] == "git":
+            git_args = git_args[1:]
+        try:
+            guard_git_command(git_args, cwd=str(workspace_root), confirmed=confirmed)
+        except GitPolicyViolation as exc:
+            return ToolResult(ok=False, output="", error=str(exc))
+
+        result = subprocess.run(
+            ["git", *git_args],
+            cwd=workspace_root,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "").strip()
+            return ToolResult(ok=False, output="", error=f"git exited {result.returncode}: {err}")
+        return ToolResult(ok=True, output=(result.stdout or "").strip() or "(no output)")
+
+    return handler
+
+
 def create_default_registry(
     workspace_root: Path,
     settings: Settings | None = None,
+    *,
+    allow_writes: bool = False,
 ) -> ToolRegistry:
     s = settings or get_settings()
     root = workspace_root.resolve()
@@ -176,6 +234,11 @@ def create_default_registry(
     registry.register("grep_text", _grep_text_handler(root, s))
     registry.register("git_status", _git_status_handler(root, s))
     registry.register("git_diff_staged", _git_diff_staged_handler(root, s))
+    if allow_writes:
+        registry.register("write_file", _write_file_handler(root))
+        # The human passed the explicit --allow-writes gate; git policy still
+        # denies non-allowlisted subcommands and secret-like paths.
+        registry.register("git_exec", _git_exec_handler(root, confirmed=True))
     return registry
 
 
@@ -186,3 +249,15 @@ AVAILABLE_TOOLS_DOC = """Available read-only tools (set tool.name when execution
 - git_status: {}
 - git_diff_staged: {}
 """
+
+WRITE_TOOLS_DOC = """Write tools (human-approved for this run; use only when the goal requires it):
+- write_file: {"path": "relative/path", "content": "full new file content"}
+- git_exec: {"args": ["add", "src/main.py"]} or {"args": ["commit", "-m", "message"]}
+  Only allowlisted git subcommands run; secret-like paths are always refused.
+"""
+
+
+def build_tools_doc(allow_writes: bool) -> str:
+    if allow_writes:
+        return f"{AVAILABLE_TOOLS_DOC}\n{WRITE_TOOLS_DOC}"
+    return AVAILABLE_TOOLS_DOC
