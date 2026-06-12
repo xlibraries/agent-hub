@@ -38,3 +38,15 @@ def test_parse_strips_unknown_fields():
     step = parse_structured(text, AgentStep)
     assert step.output == "hello"
     assert step.goal == "g"
+
+
+def test_parse_coerces_dict_plan_items():
+    text = """{
+      "goal": "read main.py",
+      "thought": "t",
+      "plan": [{"action": "read_file", "path": "main.py"}]
+    }"""
+    step = parse_structured(text, AgentStep)
+    assert step.plan == ["read_file(path='main.py')"]
+    assert step.tool is not None
+    assert step.tool.name == "read_file"

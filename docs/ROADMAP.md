@@ -26,12 +26,23 @@ See [GOLDEN_RULES.md](GOLDEN_RULES.md).
 
 ### Near-term issues
 
-| Issue | Topic |
-|-------|--------|
-| [#12](https://github.com/xlibraries/agent-hub/issues/12) | Repo context + `slm agent` |
-| [#13](https://github.com/xlibraries/agent-hub/issues/13) | Tool executor loop |
-| [#14](https://github.com/xlibraries/agent-hub/issues/14) | Git & shell safety |
+| Issue | Topic | Status |
+|-------|--------|--------|
+| [#12](https://github.com/xlibraries/agent-hub/issues/12) | Repo context + `slm agent` | ✅ Done |
+| [#13](https://github.com/xlibraries/agent-hub/issues/13) | Tool executor loop | 🔄 v1 done (read-only, single tool) |
+| [#14](https://github.com/xlibraries/agent-hub/issues/14) | Git & shell safety | ⬜ Not started |
 
-**Current focus:** Phase 1 — `slm agent` workspace snapshot ([#12](https://github.com/xlibraries/agent-hub/issues/12): README, tree, git diffs); next [#13](https://github.com/xlibraries/agent-hub/issues/13) tool loop.
+## Progress
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 0 — Environment | ✅ ~100% | uv, Docker, structlog, OTEL, experiments, CI, pytest, benchmarks |
+| 1 — Local SLM core | 🔄 ~75% | Done: models, `AgentStep`, parser, CLI, repo context, kill switch, read-only tool execution. Left: prompt management, conversation persistence, file-editing assistant |
+| 2 — Tool execution | 🔄 ~25% | Done: registry + 5 read-only tools, execution tracing. Left: sandbox, shell/python exec, file editing, replay, recovery |
+| 3 — Evaluation | 🔄 ~10% | Latency scaffold only |
+| 4–8 | ⬜ 0% | Memory, RAG, browser, code intelligence, multi-agent |
+| 9 — Hardening | ⬜ 0% | |
+
+**Current focus:** Phase 1 close-out — conversation persistence, prompt management; then [#14](https://github.com/xlibraries/agent-hub/issues/14) git safety to unlock write tools.
 
 **Principles:** reliable before autonomous · observable before complex · benchmarked before optimized · modular before generalized.

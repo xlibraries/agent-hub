@@ -81,6 +81,11 @@ def agent(
         "--brief",
         help="Print memory_write.content (or thought) before JSON",
     ),
+    execute: bool = typer.Option(
+        False,
+        "--execute",
+        help="Run read-only tools requested in the plan (read_file, list_dir, grep_text, git_*)",
+    ),
 ) -> None:
     """Agent Hub task runner: injects workspace snapshot, returns structured AgentStep JSON."""
     log = get_logger("slm.agent")
@@ -88,7 +93,8 @@ def agent(
         typer.secho("Kill switch is engaged. Aborting.", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    repo = gather_repo_context(cwd)
+    root = (cwd or Path.cwd()).resolve()
+    repo = gather_repo_context(root)
     context_block = repo.as_prompt_block()
     llm = create_ollama_model(model)
     tracker = get_tracker()
@@ -100,9 +106,16 @@ def agent(
             "goal_len": len(goal),
             "git_repo": repo.is_git_repo,
             "has_readme": bool(repo.readme),
+            "execute": execute,
         },
     ) as run:
-        state = run_agent(llm, goal, context_block)
+        state = run_agent(
+            llm,
+            goal,
+            context_block,
+            workspace_root=root,
+            execute_tools=execute,
+        )
 
         if state.get("error"):
             typer.secho(state["error"], fg=typer.colors.RED, err=True)
@@ -112,6 +125,9 @@ def agent(
         assert step is not None
         run.set_metrics(latency_ms=step.metrics.latency_ms, tokens=step.metrics.tokens)
         payload = step.model_dump(mode="json")
+        tool_output = state.get("tool_output")
+        if tool_output is not None:
+            payload["tool_output"] = tool_output
         text = json.dumps(payload, indent=2)
         log.info(
             "agent_step",
@@ -123,6 +139,7 @@ def agent(
     if brief:
         summary = (
             step.output.strip()
+            or (tool_output or "").strip()
             or (step.memory_write.content if step.memory_write else "")
             or step.thought
         )

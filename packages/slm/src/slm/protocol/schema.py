@@ -59,6 +59,49 @@ class AgentStep(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    @staticmethod
+    def _coerce_plan_item(item: Any) -> tuple[str, dict[str, Any] | None]:
+        """Normalize SLM plan entries; infer tool calls from dict-shaped steps."""
+        if isinstance(item, str):
+            return item, None
+        if not isinstance(item, dict):
+            return str(item), None
+
+        action = item.get("action") or item.get("name") or item.get("tool")
+        if isinstance(action, str) and action.strip() and action.strip().lower() not in {
+            "none",
+            "null",
+        }:
+            args = {
+                key: value
+                for key, value in item.items()
+                if key not in {"action", "name", "tool"}
+            }
+            args_text = ", ".join(f"{key}={value!r}" for key, value in args.items())
+            label = f"{action}({args_text})" if args_text else action
+            return label, {"name": action.strip(), "args": args}
+
+        return str(item), None
+
+    @classmethod
+    def _normalize_plan_and_tool(cls, data: dict[str, Any]) -> dict[str, Any]:
+        plan = data.get("plan")
+        if not isinstance(plan, list):
+            return data
+
+        normalized_plan: list[str] = []
+        inferred_tool: dict[str, Any] | None = None
+        for item in plan:
+            step_text, tool_payload = cls._coerce_plan_item(item)
+            normalized_plan.append(step_text)
+            if tool_payload and inferred_tool is None:
+                inferred_tool = tool_payload
+
+        data["plan"] = normalized_plan
+        if inferred_tool and not data.get("tool"):
+            data["tool"] = inferred_tool
+        return data
+
     @model_validator(mode="before")
     @classmethod
     def coerce_null_fields(cls, data: Any) -> Any:
@@ -79,4 +122,4 @@ class AgentStep(BaseModel):
             out.pop("memory_write", None)
         if out.get("tool") is None:
             out.pop("tool", None)
-        return out
+        return cls._normalize_plan_and_tool(out)
