@@ -22,6 +22,9 @@ uv run slm agent --brief "What is this repository about?"
 # Commit messages — uses diffs from workspace snapshot
 uv run slm agent "Write commit message(s) for uncommitted changes"
 
+# Execute read-only tools requested by the plan (read_file, list_dir, grep_text, git_*)
+uv run slm agent "read packages/slm/src/slm/cli/main.py" --execute
+
 # Planner with workspace context
 uv run slm plan --repo "Break down adding file search tool"
 
@@ -35,6 +38,7 @@ uv run slm plan "Add a hello-world function to main.py"
 |---------|---------|
 | `slm chat` | Quick Q&A — **does not** see your repo or run tools |
 | `slm agent` | **Agent Hub** — README + tree + git snapshot; use `--brief` for a short answer |
+| `slm agent --execute` | Same, plus runs read-only tools from the plan (plan → execute → verify) |
 | `slm plan` | Structured plan JSON; add `--repo` or `--cwd` for workspace context |
 
 ## Development
