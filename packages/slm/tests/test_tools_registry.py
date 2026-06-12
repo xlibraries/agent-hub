@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from slm.tools.builtin import create_default_registry
 from slm.tools.paths import PathEscapeError, resolve_workspace_path
 

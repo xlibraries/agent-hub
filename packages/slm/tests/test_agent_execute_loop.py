@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from langchain_core.messages import BaseMessage
-
 from slm.graph.agent import run_planner
 from slm.models.base import ChatModel, GenerationMetrics, GenerationResult
 from slm.protocol.schema import VerificationStatus
