@@ -21,17 +21,29 @@ Core package for the Agent Hub local SLM stack.
 
 ## Tool execution (`slm agent --execute`)
 
-`slm agent` is plan-only by default. With `--execute`, the graph runs
-**plan → execute → verify**:
+`slm agent` is plan-only by default. With `--execute`, the graph runs an
+iterative **plan → execute → verify → plan …** loop:
 
 1. **plan** — the model returns an `AgentStep`; executable actions go in `tool`
-2. **execute** — the runtime runs the requested tool from the read-only registry
-3. **verify** — `verification.status` is set to `pass`/`fail`; raw results are
-   returned in `tool_output` (separate from the model's `output` summary)
+2. **execute** — the runtime runs the requested tool from the registry
+3. **verify** — `verification.status` set to `pass`/`fail`; the result is
+   recorded as an observation and fed back to the model
+4. the loop ends when the model stops requesting tools (final answer in
+   `output`) or the step budget is reached (`--max-steps`, default 5)
 
-All tools are workspace-scoped (path escapes are rejected) and read-only.
-Write operations (file edits, `git commit`) are deliberately excluded until
-the git/shell safety policy lands (issue #14).
+All tools are workspace-scoped (path escapes are rejected). Read-only tools
+are always available; **write tools require the explicit `--allow-writes`
+human gate**:
+
+| Gate | Tools |
+|------|-------|
+| `--execute` | `read_file`, `list_dir`, `grep_text`, `git_status`, `git_diff_staged` |
+| `--allow-writes` | + `write_file`, `git_exec` (allowlisted subcommands only, secret paths always refused — see `docs/git-safety.md`) |
+
+```bash
+slm agent "read main.py and summarize it" --execute
+slm agent "fix the typo in README and commit it" --allow-writes
+```
 
 ## Prompt management (`slm prompts`)
 

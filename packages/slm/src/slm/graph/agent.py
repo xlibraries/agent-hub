@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from slm.config.settings import get_settings
 from slm.logging.setup import get_logger
 from slm.models.base import ChatModel, human_message, system_message
 from slm.output.parser import StructuredOutputError, parse_with_retry
@@ -15,7 +17,7 @@ from slm.prompts.planner import PLANNER_SYSTEM
 from slm.protocol.schema import AgentStep, Verification, VerificationStatus
 from slm.safety.kill_switch import assert_not_killed
 from slm.telemetry.tracing import start_span
-from slm.tools.builtin import AVAILABLE_TOOLS_DOC, create_default_registry
+from slm.tools.builtin import build_tools_doc, create_default_registry
 
 logger = get_logger(__name__)
 
@@ -26,6 +28,8 @@ class AgentState(TypedDict):
     raw_response: str
     error: str | None
     tool_output: str | None
+    observations: list[dict[str, Any]]
+    steps_taken: int
 
 
 def _initial_state(goal: str) -> AgentState:
@@ -35,7 +39,23 @@ def _initial_state(goal: str) -> AgentState:
         "raw_response": "",
         "error": None,
         "tool_output": None,
+        "observations": [],
+        "steps_taken": 0,
     }
+
+
+def _observations_block(observations: list[dict[str, Any]]) -> str:
+    lines = ["## Tool results so far (oldest first)"]
+    for index, obs in enumerate(observations, start=1):
+        status = "ok" if obs["ok"] else f"FAILED: {obs.get('error', '')}"
+        lines.append(f"### step {index}: {obs['tool']}({json.dumps(obs['args'])}) — {status}")
+        if obs.get("output"):
+            lines.append(obs["output"])
+    lines.append(
+        "\nIf the goal is complete, respond with tool name \"none\" and the final "
+        "answer in `output`. Otherwise request the next tool."
+    )
+    return "\n".join(lines)
 
 
 def build_planner_graph(
@@ -45,26 +65,50 @@ def build_planner_graph(
     workspace_context: str | None = None,
     workspace_root: Path | None = None,
     execute_tools: bool = False,
+    allow_writes: bool = False,
+    max_steps: int | None = None,
 ):
-    """LangGraph: plan → (optional: execute → verify) → end."""
+    """LangGraph: plan → (execute → verify → plan …) → end.
+
+    Without `execute_tools` the graph is plan-only. With it, tool requests are
+    executed and results fed back to the model until it stops requesting tools
+    or the step budget is exhausted.
+    """
+
+    budget = max_steps if max_steps is not None else get_settings().executor_max_steps
 
     effective_prompt = system_prompt
     if execute_tools:
-        effective_prompt = f"{system_prompt.rstrip()}\n\n{AVAILABLE_TOOLS_DOC}"
+        effective_prompt = f"{system_prompt.rstrip()}\n\n{build_tools_doc(allow_writes)}"
+
+    registry = None
+    if execute_tools and workspace_root is not None:
+        registry = create_default_registry(
+            workspace_root.resolve(), allow_writes=allow_writes
+        )
 
     def plan_node(state: AgentState) -> AgentState:
         assert_not_killed()
-        with start_span("slm.graph.plan", attributes={"slm.has_context": bool(workspace_context)}):
+        with start_span(
+            "slm.graph.plan",
+            attributes={
+                "slm.has_context": bool(workspace_context),
+                "slm.steps_taken": state["steps_taken"],
+            },
+        ):
             return _plan_node_impl(state, effective_prompt)
 
     def _plan_node_impl(state: AgentState, prompt: str) -> AgentState:
         started = time.perf_counter()
-        user_content = state["goal"]
+        parts: list[str] = []
         if workspace_context:
-            user_content = f"{workspace_context}\n\n## User goal\n{state['goal']}"
+            parts.append(workspace_context)
+        if state["observations"]:
+            parts.append(_observations_block(state["observations"]))
+        parts.append(f"## User goal\n{state['goal']}")
         messages = [
             system_message(prompt),
-            human_message(user_content),
+            human_message("\n\n".join(parts)),
         ]
         result = model.generate(messages)
         latency_ms = (time.perf_counter() - started) * 1000
@@ -89,6 +133,7 @@ def build_planner_graph(
             "plan_complete",
             task_id=step.task_id,
             steps=len(step.plan),
+            steps_taken=state["steps_taken"],
             latency_ms=latency_ms,
             tokens=step.metrics.tokens,
         )
@@ -97,11 +142,9 @@ def build_planner_graph(
     def execute_node(state: AgentState) -> AgentState:
         assert_not_killed()
         step = state["step"]
-        if step is None or step.tool is None:
+        if step is None or step.tool is None or registry is None:
             return {**state, "error": "no tool to execute", "tool_output": None}
 
-        root = (workspace_root or Path.cwd()).resolve()
-        registry = create_default_registry(root)
         with start_span(
             "slm.graph.execute",
             attributes={"slm.tool": step.tool.name},
@@ -113,6 +156,7 @@ def build_planner_graph(
             task_id=step.task_id,
             tool=step.tool.name,
             ok=result.ok,
+            error=result.error or None,
         )
         if result.ok:
             return {**state, "tool_output": result.output, "error": None}
@@ -123,12 +167,14 @@ def build_planner_graph(
         if step is None:
             return state
 
-        if state.get("error"):
+        tool_error = state.get("error")
+        tool_output = state.get("tool_output")
+        if tool_error:
             step.verification = Verification(
                 status=VerificationStatus.FAIL,
-                reason=state["error"] or "tool failed",
+                reason=tool_error,
             )
-        elif not state.get("tool_output"):
+        elif not tool_output:
             step.verification = Verification(
                 status=VerificationStatus.FAIL,
                 reason="tool produced no output",
@@ -139,21 +185,44 @@ def build_planner_graph(
                 reason="tool executed successfully",
             )
 
-        return {**state, "step": step}
+        observation = {
+            "tool": step.tool.name if step.tool else "",
+            "args": step.tool.args if step.tool else {},
+            "ok": step.verification.status == VerificationStatus.PASS,
+            "output": tool_output or "",
+            "error": tool_error or "",
+        }
+        return {
+            **state,
+            "step": step,
+            # Tool failures are recorded as observations so the model can
+            # correct course; only parse failures surface as state errors.
+            "error": None,
+            "observations": [*state["observations"], observation],
+            "steps_taken": state["steps_taken"] + 1,
+        }
 
     def route_after_plan(state: AgentState) -> Literal["execute", "__end__"]:
-        if not execute_tools or workspace_root is None:
+        if not execute_tools or registry is None:
+            return "__end__"
+        if state.get("error"):
             return "__end__"
         step = state.get("step")
-        if step is not None and step.tool is not None:
+        if step is not None and step.tool is not None and state["steps_taken"] < budget:
             return "execute"
         return "__end__"
+
+    def route_after_verify(state: AgentState) -> Literal["plan", "__end__"]:
+        if state["steps_taken"] >= budget:
+            logger.info("executor_budget_exhausted", steps_taken=state["steps_taken"])
+            return "__end__"
+        return "plan"
 
     graph = StateGraph(AgentState)
     graph.add_node("plan", plan_node)
     graph.set_entry_point("plan")
 
-    if execute_tools and workspace_root is not None:
+    if execute_tools and registry is not None:
         graph.add_node("execute", execute_node)
         graph.add_node("verify", verify_node)
         graph.add_conditional_edges(
@@ -162,7 +231,11 @@ def build_planner_graph(
             {"execute": "execute", "__end__": END},
         )
         graph.add_edge("execute", "verify")
-        graph.add_edge("verify", END)
+        graph.add_conditional_edges(
+            "verify",
+            route_after_verify,
+            {"plan": "plan", "__end__": END},
+        )
     else:
         graph.add_edge("plan", END)
 
@@ -177,6 +250,8 @@ def run_planner(
     workspace_context: str | None = None,
     workspace_root: Path | None = None,
     execute_tools: bool = False,
+    allow_writes: bool = False,
+    max_steps: int | None = None,
 ) -> AgentState:
     app = build_planner_graph(
         model,
@@ -184,6 +259,8 @@ def run_planner(
         workspace_context=workspace_context,
         workspace_root=workspace_root,
         execute_tools=execute_tools,
+        allow_writes=allow_writes,
+        max_steps=max_steps,
     )
     return app.invoke(_initial_state(goal))
 
@@ -207,6 +284,8 @@ def run_agent(
     system_prompt: str = AGENT_SYSTEM,
     workspace_root: Path | None = None,
     execute_tools: bool = False,
+    allow_writes: bool = False,
+    max_steps: int | None = None,
 ) -> AgentState:
     """Agent Hub path: repo-aware system prompt + workspace snapshot."""
     return run_planner(
@@ -216,4 +295,6 @@ def run_agent(
         workspace_context=workspace_context,
         workspace_root=workspace_root,
         execute_tools=execute_tools,
+        allow_writes=allow_writes,
+        max_steps=max_steps,
     )

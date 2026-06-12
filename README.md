@@ -45,7 +45,8 @@ uv run slm plan "Add a hello-world function to main.py"
 | `slm chat --session NAME` | Multi-turn chat; history persisted in `.agent-hub/sessions.db` |
 | `slm sessions list/show` | Inspect persisted conversations |
 | `slm agent` | **Agent Hub** — README + tree + git snapshot; use `--brief` for a short answer |
-| `slm agent --execute` | Same, plus runs read-only tools from the plan (plan → execute → verify) |
+| `slm agent --execute` | Same, plus iterative tool loop (plan → execute → verify → plan …) |
+| `slm agent --allow-writes` | Human gate enabling `write_file` + policy-checked `git_exec` |
 | `slm plan` | Structured plan JSON; add `--repo` or `--cwd` for workspace context |
 
 ## Development

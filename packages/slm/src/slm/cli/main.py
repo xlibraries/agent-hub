@@ -126,7 +126,17 @@ def agent(
     execute: bool = typer.Option(
         False,
         "--execute",
-        help="Run read-only tools requested in the plan (read_file, list_dir, grep_text, git_*)",
+        help="Iteratively run tools requested by the plan (plan → execute → verify loop)",
+    ),
+    allow_writes: bool = typer.Option(
+        False,
+        "--allow-writes",
+        help="Human approval gate: enables write_file + policy-checked git_exec; implies --execute",
+    ),
+    max_steps: int | None = typer.Option(
+        None,
+        "--max-steps",
+        help="Override executor step budget (default: SLM_EXECUTOR_MAX_STEPS, 5)",
     ),
     prompt_key: str = typer.Option(
         "agent.default",
@@ -148,6 +158,8 @@ def agent(
         typer.secho(f"Unknown prompt key: {prompt_key!r}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from None
 
+    if allow_writes:
+        execute = True
     root = (cwd or Path.cwd()).resolve()
     repo = gather_repo_context(root)
     context_block = repo.as_prompt_block()
@@ -162,6 +174,7 @@ def agent(
             "git_repo": repo.is_git_repo,
             "has_readme": bool(repo.readme),
             "execute": execute,
+            "allow_writes": allow_writes,
         },
     ) as run:
         state = run_agent(
@@ -171,6 +184,8 @@ def agent(
             system_prompt=system_prompt,
             workspace_root=root,
             execute_tools=execute,
+            allow_writes=allow_writes,
+            max_steps=max_steps,
         )
 
         if state.get("error"):
@@ -184,6 +199,8 @@ def agent(
         tool_output = state.get("tool_output")
         if tool_output is not None:
             payload["tool_output"] = tool_output
+        if state.get("observations"):
+            payload["observations"] = state["observations"]
         text = json.dumps(payload, indent=2)
         log.info(
             "agent_step",
