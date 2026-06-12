@@ -1,5 +1,4 @@
 from langchain_core.messages import BaseMessage
-
 from slm.graph.agent import run_planner
 from slm.models.base import ChatModel, GenerationMetrics, GenerationResult
 
