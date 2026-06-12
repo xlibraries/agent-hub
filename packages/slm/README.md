@@ -15,7 +15,7 @@ Core package for the Agent Hub local SLM stack.
 | `slm.context` | Read-only repo/git workspace snapshots |
 | `slm.memory` | SQLite conversation persistence (`SessionStore`) |
 | `slm.tools` | Read-only tool registry (`read_file`, `list_dir`, `grep_text`, `git_status`, `git_diff_staged`) |
-| `slm.safety` | Kill switch for autonomous loops (`SLM_KILL_SWITCH`) |
+| `slm.safety` | Kill switch (`SLM_KILL_SWITCH`) + git policy (allowlists, confirmation gates, secret blocking) |
 | `slm.graph` | LangGraph planner + execute/verify loop + Agent Hub agent path |
 | `slm.cli` | Typer CLI (`chat`, `agent`, `plan`, …) |
 
