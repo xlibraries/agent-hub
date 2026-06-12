@@ -22,7 +22,7 @@ htmlcov/
 coverage.xml
 *.log
 .benchmarks/
-experiments/
+/experiments/
 .agent-hub/
 data/
 *.db
