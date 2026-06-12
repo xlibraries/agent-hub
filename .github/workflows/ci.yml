@@ -30,3 +30,6 @@ jobs:
 
       - name: Latency benchmark (mock)
         run: uv run python benchmarks/run_latency.py --mock --runs 3
+
+      - name: Golden eval suite (replay)
+        run: uv run python benchmarks/run_evals.py
