@@ -14,8 +14,8 @@ Core package for the Agent Hub local SLM stack.
 | `slm.output` | JSON structured output parsing |
 | `slm.context` | Read-only repo/git workspace snapshots |
 | `slm.memory` | SQLite conversation persistence (`SessionStore`) |
-| `slm.tools` | Read-only tool registry (`read_file`, `list_dir`, `grep_text`, `git_status`, `git_diff_staged`) |
-| `slm.safety` | Kill switch (`SLM_KILL_SWITCH`) + git policy (allowlists, confirmation gates, secret blocking) |
+| `slm.tools` | Tool registry + sandboxed `run_shell` (`read_file`, `grep_text`, gated write/git/shell) |
+| `slm.safety` | Kill switch + git/shell policies (allowlists, human gates, secret blocking) |
 | `slm.graph` | LangGraph planner + execute/verify loop + Agent Hub agent path |
 | `slm.evals` | Golden eval suite: replayable agent tasks with deterministic scoring |
 | `slm.cli` | Typer CLI (`chat`, `agent`, `plan`, …) |
@@ -38,7 +38,8 @@ human gate**:
 
 | Gate | Tools |
 |------|-------|
-| `--execute` | `read_file`, `list_dir`, `grep_text`, `git_status`, `git_diff_staged` |
+| `--execute` | `read_file`, `list_dir`, `grep_text`, `git_status`, `git_diff_staged`, read-only `run_shell` |
+| `--allow-shell` | + mutating `run_shell` (`mkdir`, `rm`, …) — see `docs/shell-sandbox.md` |
 | `--allow-writes` | + `write_file`, `git_exec` (allowlisted subcommands only, secret paths always refused — see `docs/git-safety.md`) |
 
 ```bash

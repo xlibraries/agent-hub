@@ -133,6 +133,11 @@ def agent(
         "--allow-writes",
         help="Human approval gate: enables write_file + policy-checked git_exec; implies --execute",
     ),
+    allow_shell: bool = typer.Option(
+        False,
+        "--allow-shell",
+        help="Human gate: mutating run_shell (mkdir/rm/…); implies --execute",
+    ),
     max_steps: int | None = typer.Option(
         None,
         "--max-steps",
@@ -158,7 +163,7 @@ def agent(
         typer.secho(f"Unknown prompt key: {prompt_key!r}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from None
 
-    if allow_writes:
+    if allow_writes or allow_shell:
         execute = True
     root = (cwd or Path.cwd()).resolve()
     repo = gather_repo_context(root)
@@ -175,6 +180,7 @@ def agent(
             "has_readme": bool(repo.readme),
             "execute": execute,
             "allow_writes": allow_writes,
+            "allow_shell": allow_shell,
         },
     ) as run:
         state = run_agent(
@@ -185,6 +191,7 @@ def agent(
             workspace_root=root,
             execute_tools=execute,
             allow_writes=allow_writes,
+            allow_shell=allow_shell,
             max_steps=max_steps,
         )
 

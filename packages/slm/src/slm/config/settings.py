@@ -58,6 +58,14 @@ class Settings(BaseSettings):
         default=5,
         description="Maximum plan→execute→verify iterations per agent run.",
     )
+    shell_timeout_s: float = Field(
+        default=30.0,
+        description="Maximum seconds for a sandboxed shell command.",
+    )
+    shell_max_output_chars: int = Field(
+        default=16_000,
+        description="Truncate combined stdout/stderr from run_shell.",
+    )
 
 
 @lru_cache
