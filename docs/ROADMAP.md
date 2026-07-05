@@ -38,11 +38,11 @@ See [GOLDEN_RULES.md](GOLDEN_RULES.md).
 |-------|--------|-------|
 | 0 — Environment | ✅ ~100% | uv, Docker, structlog, OTEL, experiments, CI, pytest, benchmarks |
 | 1 — Local SLM core | ✅ ~100% | Models, `AgentStep`, parser, CLI, repo context, kill switch, iterative tool execution, file-aware assistant (`--allow-writes`), conversation persistence, prompt registry |
-| 2 — Tool execution | 🔄 ~80% | Done: registry, 8 tools (read + gated write/git/shell), sandboxed `run_shell`, policy enforcement, execution tracing, failure recovery, golden shell case. Left: python_exec, web retrieval, tool replay UX |
+| 2 — Tool execution | 🔄 ~90% | Done: registry, 9 tools (read + gated write/git/shell/python), sandboxed `run_shell` + `python_exec`, policy enforcement, golden cases. Left: web retrieval, tool replay UX |
 | 3 — Evaluation | 🔄 ~50% | Done: latency harness, golden eval suite (task replay, agent scoring, CI regression gate incl. the staged-diff commit-message benchmark). Left: live-model evals, cost dashboards, memory eval suite |
 | 4–8 | ⬜ 0% | Memory, RAG, browser, code intelligence, multi-agent |
 | 9 — Hardening | ⬜ 0% | |
 
-**Current focus:** Phase 2 close-out — `python_exec` tool; then Phase 4 memory ([#6](https://github.com/xlibraries/agent-hub/issues/6)).
+**Current focus:** Phase 2 close-out — web retrieval; then Phase 4 memory ([#6](https://github.com/xlibraries/agent-hub/issues/6)).
 
 **Principles:** reliable before autonomous · observable before complex · benchmarked before optimized · modular before generalized.

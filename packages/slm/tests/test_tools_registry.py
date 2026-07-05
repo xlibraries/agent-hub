@@ -138,3 +138,42 @@ def test_run_shell_git_denied_use_git_tools(tmp_path: Path) -> None:
     result = registry.execute("run_shell", {"command": "git status"})
     assert not result.ok
     assert "not allowlisted" in result.error
+
+
+def test_python_exec_pytest_module(tmp_path: Path) -> None:
+    (tmp_path / "test_sample.py").write_text(
+        "def test_ok():\n    assert 1 + 1 == 2\n", encoding="utf-8"
+    )
+    registry = create_default_registry(tmp_path)
+    result = registry.execute(
+        "python_exec",
+        {"module": "pytest", "args": ["-q", "test_sample.py"]},
+    )
+    assert result.ok, result.error
+    assert "passed" in result.output.lower() or "1 passed" in result.output
+
+
+def test_python_exec_unknown_module_denied(tmp_path: Path) -> None:
+    registry = create_default_registry(tmp_path)
+    result = registry.execute("python_exec", {"module": "os", "args": [".getcwd"]})
+    assert not result.ok
+    assert "not allowlisted" in result.error
+
+
+def test_python_exec_code_requires_allow_shell(tmp_path: Path) -> None:
+    registry = create_default_registry(tmp_path)
+    denied = registry.execute("python_exec", {"code": "print(42)"})
+    assert not denied.ok
+    assert "allow-shell" in denied.error.lower() or "requires" in denied.error.lower()
+
+    allowed = create_default_registry(tmp_path, allow_shell=True)
+    ok = allowed.execute("python_exec", {"code": "print(42)"})
+    assert ok.ok
+    assert "42" in ok.output
+
+
+def test_python_exec_blocks_dangerous_code(tmp_path: Path) -> None:
+    registry = create_default_registry(tmp_path, allow_shell=True)
+    result = registry.execute("python_exec", {"code": "import subprocess"})
+    assert not result.ok
+    assert "blocked" in result.error

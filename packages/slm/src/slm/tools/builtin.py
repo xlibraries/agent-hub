@@ -10,6 +10,7 @@ from slm.context.repo import gather_repo_context
 from slm.context.truncate import truncate_text
 from slm.safety.git_policy import GitPolicyViolation, guard_git_command, is_secret_path
 from slm.tools.paths import PathEscapeError, resolve_workspace_path
+from slm.tools.python_exec import run_python_exec
 from slm.tools.registry import ToolRegistry, ToolResult
 from slm.tools.sandbox import run_sandboxed_command
 
@@ -221,6 +222,34 @@ def _git_exec_handler(workspace_root: Path, *, confirmed: bool) -> ToolHandler:
     return handler
 
 
+def _python_exec_handler(
+    workspace_root: Path, settings: Settings, *, allow_shell: bool
+) -> ToolHandler:
+    def handler(args: dict[str, Any]) -> ToolResult:
+        module = args.get("module")
+        code = args.get("code")
+        extra = args.get("args")
+        if module is not None and not isinstance(module, str):
+            return ToolResult(ok=False, output="", error="module must be a string")
+        if code is not None and not isinstance(code, str):
+            return ToolResult(ok=False, output="", error="code must be a string")
+        if extra is not None and not (
+            isinstance(extra, list) and all(isinstance(a, str) for a in extra)
+        ):
+            return ToolResult(ok=False, output="", error="args must be a list of strings")
+        return run_python_exec(
+            module=module,
+            args=extra,
+            code=code,
+            workspace_root=workspace_root,
+            settings=settings,
+            allow_code=allow_shell,
+            confirmed=allow_shell,
+        )
+
+    return handler
+
+
 def _run_shell_handler(
     workspace_root: Path, settings: Settings, *, allow_shell: bool
 ) -> ToolHandler:
@@ -255,6 +284,7 @@ def create_default_registry(
     registry.register("git_status", _git_status_handler(root, s))
     registry.register("git_diff_staged", _git_diff_staged_handler(root, s))
     registry.register("run_shell", _run_shell_handler(root, s, allow_shell=allow_shell))
+    registry.register("python_exec", _python_exec_handler(root, s, allow_shell=allow_shell))
     if allow_writes:
         registry.register("write_file", _write_file_handler(root))
         # The human passed the explicit --allow-writes gate; git policy still
@@ -271,6 +301,8 @@ AVAILABLE_TOOLS_DOC = """Available read-only tools (set tool.name when execution
 - git_diff_staged: {}
 - run_shell: {"command": "ls -la"} or {"command": "uv run pytest -q"}
   Sandboxed: no shell invocation, argv allowlist only. Mutating commands need --allow-shell.
+- python_exec: {"module": "pytest", "args": ["-q", "packages/slm/tests"]}
+  Runs `python -m …` via sys.executable; allowlisted modules only.
 """
 
 WRITE_TOOLS_DOC = """Write tools (human-approved for this run; use only when the goal requires it):
@@ -279,9 +311,11 @@ WRITE_TOOLS_DOC = """Write tools (human-approved for this run; use only when the
   Only allowlisted git subcommands run; secret-like paths are always refused.
 """
 
-SHELL_TOOLS_DOC = """Shell mutations (--allow-shell human gate):
+SHELL_TOOLS_DOC = """Shell / Python mutations (--allow-shell human gate):
 - run_shell: {"command": "mkdir -p build"} or {"command": "rm notes.tmp"}
   Never use shell metacharacters (; | & >). Use git_exec for git, not run_shell.
+- python_exec: {"code": "print(sum(range(10)))"}
+  Blocked patterns (subprocess, eval, file writes) always denied.
 """
 
 
