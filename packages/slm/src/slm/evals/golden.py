@@ -189,10 +189,43 @@ SHELL_LS_CASE = EvalCase(
 )
 
 
+def _setup_pytest_file(root: Path) -> None:
+    (root / "test_math.py").write_text(
+        "def test_add():\n    assert 2 + 2 == 4\n", encoding="utf-8"
+    )
+
+
+def _score_python_pytest(state: AgentState, root: Path) -> tuple[bool, str]:
+    _ = root
+    if not state["observations"] or not state["observations"][0]["ok"]:
+        return False, "python_exec did not succeed"
+    if "passed" not in state["observations"][0]["output"].lower():
+        return False, "pytest output missing pass indication"
+    return True, "python_exec ran pytest successfully"
+
+
+PYTHON_PYTEST_CASE = EvalCase(
+    name="python_exec_pytest",
+    goal="run the unit test in this workspace",
+    responses=[
+        _step(
+            {
+                "name": "python_exec",
+                "args": {"module": "pytest", "args": ["-q", "test_math.py"]},
+            }
+        ),
+        _step(None, output="tests passed"),
+    ],
+    setup=_setup_pytest_file,
+    score=_score_python_pytest,
+)
+
+
 GOLDEN_CASES = [
     COMMIT_MESSAGE_CASE,
     FILE_ANSWER_CASE,
     RECOVERY_CASE,
     WRITE_GATE_CASE,
     SHELL_LS_CASE,
+    PYTHON_PYTEST_CASE,
 ]

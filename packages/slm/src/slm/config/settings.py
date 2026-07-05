@@ -66,6 +66,14 @@ class Settings(BaseSettings):
         default=16_000,
         description="Truncate combined stdout/stderr from run_shell.",
     )
+    python_exec_timeout_s: float = Field(
+        default=60.0,
+        description="Maximum seconds for python_exec (-m pytest, -c snippets).",
+    )
+    python_exec_max_code_chars: int = Field(
+        default=2_000,
+        description="Maximum length of python -c code snippets.",
+    )
 
 
 @lru_cache
