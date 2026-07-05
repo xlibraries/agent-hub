@@ -18,4 +18,5 @@ deterministic `ReplayModel` — no Ollama required. Any failure exits non-zero,
 so the CI step doubles as agent regression testing.
 
 Current cases: commit message grounded in a real staged diff, file-aware
-answers, recovery after a failed tool, and write-gate enforcement.
+answers, recovery after a failed tool, write-gate enforcement, and sandboxed
+`run_shell` (`ls` under `--execute`).

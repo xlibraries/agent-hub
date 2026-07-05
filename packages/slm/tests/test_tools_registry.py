@@ -104,3 +104,37 @@ def test_git_exec_blocks_secret_staging(tmp_path: Path) -> None:
     result = registry.execute("git_exec", {"args": ["add", ".env"]})
     assert not result.ok
     assert "secret-like" in result.error
+
+
+def test_run_shell_ls_read_only(tmp_path: Path) -> None:
+    (tmp_path / "visible.txt").write_text("ok\n", encoding="utf-8")
+    registry = create_default_registry(tmp_path)
+    result = registry.execute("run_shell", {"command": "ls visible.txt"})
+    assert result.ok
+    assert "visible.txt" in result.output
+
+
+def test_run_shell_rejects_chaining(tmp_path: Path) -> None:
+    registry = create_default_registry(tmp_path)
+    result = registry.execute("run_shell", {"command": "ls; echo pwned"})
+    assert not result.ok
+    assert "metacharacters" in result.error
+
+
+def test_run_shell_mkdir_requires_allow_shell(tmp_path: Path) -> None:
+    registry = create_default_registry(tmp_path)
+    denied = registry.execute("run_shell", {"command": "mkdir build"})
+    assert not denied.ok
+    assert "allow-shell" in denied.error.lower() or "requires" in denied.error.lower()
+
+    allowed = create_default_registry(tmp_path, allow_shell=True)
+    ok = allowed.execute("run_shell", {"command": "mkdir build"})
+    assert ok.ok
+    assert (tmp_path / "build").is_dir()
+
+
+def test_run_shell_git_denied_use_git_tools(tmp_path: Path) -> None:
+    registry = create_default_registry(tmp_path, allow_shell=True)
+    result = registry.execute("run_shell", {"command": "git status"})
+    assert not result.ok
+    assert "not allowlisted" in result.error

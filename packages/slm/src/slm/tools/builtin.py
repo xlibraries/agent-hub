@@ -11,6 +11,7 @@ from slm.context.truncate import truncate_text
 from slm.safety.git_policy import GitPolicyViolation, guard_git_command, is_secret_path
 from slm.tools.paths import PathEscapeError, resolve_workspace_path
 from slm.tools.registry import ToolRegistry, ToolResult
+from slm.tools.sandbox import run_sandboxed_command
 
 ToolHandler = Callable[[dict[str, Any]], ToolResult]
 
@@ -220,11 +221,30 @@ def _git_exec_handler(workspace_root: Path, *, confirmed: bool) -> ToolHandler:
     return handler
 
 
+def _run_shell_handler(
+    workspace_root: Path, settings: Settings, *, allow_shell: bool
+) -> ToolHandler:
+    def handler(args: dict[str, Any]) -> ToolResult:
+        command = str(args.get("command", "")).strip()
+        if not command:
+            return ToolResult(ok=False, output="", error="run_shell requires args.command")
+        return run_sandboxed_command(
+            command,
+            workspace_root=workspace_root,
+            settings=settings,
+            allow_mutating=allow_shell,
+            confirmed=allow_shell,
+        )
+
+    return handler
+
+
 def create_default_registry(
     workspace_root: Path,
     settings: Settings | None = None,
     *,
     allow_writes: bool = False,
+    allow_shell: bool = False,
 ) -> ToolRegistry:
     s = settings or get_settings()
     root = workspace_root.resolve()
@@ -234,6 +254,7 @@ def create_default_registry(
     registry.register("grep_text", _grep_text_handler(root, s))
     registry.register("git_status", _git_status_handler(root, s))
     registry.register("git_diff_staged", _git_diff_staged_handler(root, s))
+    registry.register("run_shell", _run_shell_handler(root, s, allow_shell=allow_shell))
     if allow_writes:
         registry.register("write_file", _write_file_handler(root))
         # The human passed the explicit --allow-writes gate; git policy still
@@ -248,6 +269,8 @@ AVAILABLE_TOOLS_DOC = """Available read-only tools (set tool.name when execution
 - grep_text: {"pattern": "substring", "path": "."}
 - git_status: {}
 - git_diff_staged: {}
+- run_shell: {"command": "ls -la"} or {"command": "uv run pytest -q"}
+  Sandboxed: no shell invocation, argv allowlist only. Mutating commands need --allow-shell.
 """
 
 WRITE_TOOLS_DOC = """Write tools (human-approved for this run; use only when the goal requires it):
@@ -256,8 +279,16 @@ WRITE_TOOLS_DOC = """Write tools (human-approved for this run; use only when the
   Only allowlisted git subcommands run; secret-like paths are always refused.
 """
 
+SHELL_TOOLS_DOC = """Shell mutations (--allow-shell human gate):
+- run_shell: {"command": "mkdir -p build"} or {"command": "rm notes.tmp"}
+  Never use shell metacharacters (; | & >). Use git_exec for git, not run_shell.
+"""
 
-def build_tools_doc(allow_writes: bool) -> str:
+
+def build_tools_doc(allow_writes: bool, allow_shell: bool = False) -> str:
+    parts = [AVAILABLE_TOOLS_DOC]
     if allow_writes:
-        return f"{AVAILABLE_TOOLS_DOC}\n{WRITE_TOOLS_DOC}"
-    return AVAILABLE_TOOLS_DOC
+        parts.append(WRITE_TOOLS_DOC)
+    if allow_shell:
+        parts.append(SHELL_TOOLS_DOC)
+    return "\n".join(parts)

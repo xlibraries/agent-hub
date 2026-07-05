@@ -164,9 +164,35 @@ WRITE_GATE_CASE = EvalCase(
 )
 
 
+def _setup_shell_dir(root: Path) -> None:
+    (root / "notes.txt").write_text("hello\n", encoding="utf-8")
+
+
+def _score_shell_ls(state: AgentState, root: Path) -> tuple[bool, str]:
+    _ = root
+    if not state["observations"] or not state["observations"][0]["ok"]:
+        return False, "run_shell did not succeed"
+    if "notes.txt" not in state["observations"][0]["output"]:
+        return False, "ls output missing expected file"
+    return True, "sandboxed ls listed workspace file"
+
+
+SHELL_LS_CASE = EvalCase(
+    name="sandboxed_shell_ls",
+    goal="list files in the workspace",
+    responses=[
+        _step({"name": "run_shell", "args": {"command": "ls notes.txt"}}),
+        _step(None, output="notes.txt is present"),
+    ],
+    setup=_setup_shell_dir,
+    score=_score_shell_ls,
+)
+
+
 GOLDEN_CASES = [
     COMMIT_MESSAGE_CASE,
     FILE_ANSWER_CASE,
     RECOVERY_CASE,
     WRITE_GATE_CASE,
+    SHELL_LS_CASE,
 ]

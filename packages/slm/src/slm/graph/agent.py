@@ -66,6 +66,7 @@ def build_planner_graph(
     workspace_root: Path | None = None,
     execute_tools: bool = False,
     allow_writes: bool = False,
+    allow_shell: bool = False,
     max_steps: int | None = None,
 ):
     """LangGraph: plan → (execute → verify → plan …) → end.
@@ -79,12 +80,15 @@ def build_planner_graph(
 
     effective_prompt = system_prompt
     if execute_tools:
-        effective_prompt = f"{system_prompt.rstrip()}\n\n{build_tools_doc(allow_writes)}"
+        tools_doc = build_tools_doc(allow_writes, allow_shell)
+        effective_prompt = f"{system_prompt.rstrip()}\n\n{tools_doc}"
 
     registry = None
     if execute_tools and workspace_root is not None:
         registry = create_default_registry(
-            workspace_root.resolve(), allow_writes=allow_writes
+            workspace_root.resolve(),
+            allow_writes=allow_writes,
+            allow_shell=allow_shell,
         )
 
     def plan_node(state: AgentState) -> AgentState:
@@ -251,6 +255,7 @@ def run_planner(
     workspace_root: Path | None = None,
     execute_tools: bool = False,
     allow_writes: bool = False,
+    allow_shell: bool = False,
     max_steps: int | None = None,
 ) -> AgentState:
     app = build_planner_graph(
@@ -260,6 +265,7 @@ def run_planner(
         workspace_root=workspace_root,
         execute_tools=execute_tools,
         allow_writes=allow_writes,
+        allow_shell=allow_shell,
         max_steps=max_steps,
     )
     return app.invoke(_initial_state(goal))
@@ -285,6 +291,7 @@ def run_agent(
     workspace_root: Path | None = None,
     execute_tools: bool = False,
     allow_writes: bool = False,
+    allow_shell: bool = False,
     max_steps: int | None = None,
 ) -> AgentState:
     """Agent Hub path: repo-aware system prompt + workspace snapshot."""
@@ -296,5 +303,6 @@ def run_agent(
         workspace_root=workspace_root,
         execute_tools=execute_tools,
         allow_writes=allow_writes,
+        allow_shell=allow_shell,
         max_steps=max_steps,
     )
